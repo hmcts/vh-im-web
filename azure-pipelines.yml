@@ -1,0 +1,242 @@
+parameters:
+    - name: PackageApp
+      displayName: Package App
+      type: boolean
+      default: true
+
+    - name: PackageACTests
+      displayName: Package Acceptance Tests
+      type: boolean
+      default: false
+
+    - name: RunUnitTests
+      displayName: Run Unit Tests
+      type: boolean
+      default: false
+
+    - name: RunIntegTests
+      displayName: Run Integration Tests
+      type: boolean
+      default: false
+
+    - name: RunSonarCloudTests
+      displayName: Run Sonar Cloud Analysis
+      type: boolean
+      default: false
+
+    - name: RunMutationTests
+      displayName: Run Mutation Tests
+      type: boolean
+      default: false
+
+    - name: RunACTests
+      displayName: Run Acceptance Tests
+      type: boolean
+      default: false
+
+    - name: RunNodeTests
+      displayName: Run Node Tests
+      type: boolean
+      default: false
+
+    - name: testSettings
+      type: object
+      default:
+          - name: ConnectionStrings:SignalR
+            value: signalr-connection-str
+            secret: true
+
+          # VhServices
+          - name: VhServices:instantmessagingApiUrl
+            value: $(instantmessaging_api_url)
+          - name: VhServices:instantmessagingApiResourceId
+            value: vh-instantmessaging-api-identifieruris
+            secret: true
+          - name: VhServices:UserApiUrl
+            value: $(user_api_url)
+          - name: VhServices:VideoApiUrl
+            value: $(video_api_url)
+          - name: VhServices:UserApiResourceId
+            value: vh-user-api-identifieruris
+            secret: true
+          - name: VhServices:VideoApiResourceId
+            value: vh-video-api-identifieruris
+            secret: true
+
+          # AzureAd
+          - name: AzureAd:TenantId
+            value: tenantid
+            secret: true
+          - name: AzureAd:ClientId
+            value: vh-instantmessaging-web-appid-v2
+            secret: true
+          - name: AzureAd:ClientSecret
+            value: vh-instantmessaging-web-key-v2
+            secret: true
+          - name: AzureAd:VhInstantMessagingApiResourceId
+            value: vh-instantmessaging-web-identifieruris
+            secret: true
+
+    - name: appSettings
+      type: object
+      default:
+          - name: ApplicationInsights:InstrumentationKey
+            value: vh-core-infra-AppInsightsKey
+            secret: true
+          - name: ConnectionStrings:SignalR
+            value: signalr-connection-str
+            secret: true
+
+          # AzureAd
+          - name: AzureAd:ClientId
+            value: vh-instantmessaging-web-appid-v2
+            secret: true
+          - name: AzureAd:ClientSecret
+            value: vh-instantmessaging-web-key-v2
+            secret: true
+          - name: AzureAd:TenantId
+            value: tenantid
+            secret: true
+          - name: AzureAd:VhInstantMessagingWebResourceId
+            value: vh-instantmessaging-web-identifieruris
+            secret: true
+
+          # VhServices
+          - name: VhServices:UserApiResourceId
+            value: vh-user-api-identifieruris
+            secret: true
+          - name: VhServices:UserApiUrl
+            value: $(user_api_url)
+          - name: VhServices:InstantMessagingApiResourceId
+            value: vh-instantmessaging-api-identifieruris
+            secret: true
+          - name: VhServices:InstantMessagingApiUrl
+            value: $(instantmessaging_api_url)
+          - name: VhServices:EmailReformDomain
+            value: $(EmailReformDomain)
+
+variables:
+    - group: vh-domains-and-urls
+    - group: FeatureFlags_NonProd
+    - group: vh-apps-settings-generic
+    - group: vh-instantmessaging-web
+    - group: vh-instantmessaging-web-nonprod
+    - group: Saucelabs
+
+trigger:
+    branches:
+        include:
+            - master
+            - release/*
+            - hotfix/*
+
+pr:
+    branches:
+        include:
+            - master
+
+schedules:
+- cron: "0 0 14,28 * *"
+  displayName: Fortnightly ci build
+  always: true
+  branches:
+    include:
+    - master
+  
+resources:
+    repositories:
+        - repository: templates
+          type: github
+          name: hmcts/azure-devops-templates
+          ref: refs/heads/master
+          endpoint: hmcts
+    containers:
+        - container: dotnetsdk
+          image: sspublicsbox.azurecr.io/vh/dotnet-angular:3.1.102
+          endpoint: sspublicsbox
+        - container: dotnetsdk-cipipeline
+          image: sspublicsbox.azurecr.io/vh/dotnet-angular-cipipeline:3.1.102
+          endpoint: sspublicsbox
+        - container: node
+          image: node:lts-alpine
+
+extends:
+    template: stages\dotnet-package.yml@templates
+    parameters:
+        coreProjectPath: InstantMessagingWeb/InstantMessagingWeb
+        PackageApp: ${{ parameters.PackageApp }}
+        PackageAcceptanceTests: ${{ parameters.PackageACTests }}
+        packageManagers:
+            - nuget
+            - npm
+        Test: ${{ or(parameters.RunUnitTests, parameters.RunIntegTests, parameters.RunMutationTests) }}
+        testParameters:
+            coreProjectPath: InstantMessagingWeb/InstantMessagingWeb
+            RunNode: true
+            unitTestProjectPath: InstantMessagingWeb/InstantMessagingWeb.UnitTests
+            integTestProjectPath: InstantMessagingWeb/InstantMessagingWeb.IntegrationTests
+            secrets_KeyVault: $(pr_Secret_KeyVault)
+            secrets_Subscription: $(pr_Secret_Subscription)
+            RunUnitTests: ${{ parameters.RunUnitTests }}
+            RunIntegrationTests: ${{ parameters.RunIntegTests }}
+            RunSonarCloud: ${{ parameters.RunSonarCloudTests }}
+            RunStryker: ${{ parameters.RunMutationTests }}
+            IntegrationTestSettings:
+                - ${{ each setting in parameters.testSettings }}:
+                      - name: ${{ setting.name }}
+                        value: ${{ setting.value }}
+                        secret: ${{ setting.secret }}
+            coverletCoverageExclusions:
+                - '[instantmessagingWeb]instantmessagingWeb.ConfigureServicesExtensions'
+                - '[instantmessagingWeb]instantmessagingWeb.Program'
+                - '[instantmessagingWeb]instantmessagingWeb.Startup'
+                - '[*]instantmessagingWeb.Common.*'
+                - '[*]instantmessagingWeb.Extensions.*'
+                - '[*]instantmessagingWeb.Swagger.*'
+                - '[*]instantmessagingWeb.UnitTests.*'
+                - '[*]instantmessagingWeb.Services.*'
+                - '[*]Testing.Common.*'
+            sonarCloud_ExtraProperties: |
+                sonar.exclusions=**/node_modules/**,**/*.spec.ts, *.spec.ts, **/ClientApp/src/*, **/ClientApp/coverage/**/**, **/ConfigureServicesExtensions.cs, **/Startup.cs, **/Program.cs, **/Testing.Common/**, **/instantmessagingWeb.UnitTests/**, **/instantmessagingWeb.Common/**, **/instantmessagingWeb/Swagger/**, **/instantmessagingWeb/Extensions/**, **/ClientApp/src/scripts/*.js
+                sonar.typescript.exclusions=**/node_modules/**,**/typings.d.ts,**/main.ts,**/environments/environment*.ts,**/*routing.module.ts,**/api-client.ts,**/app-insights-logger.service.ts
+                sonar.coverage.exclusions= **/Testing.Common/**, instantmessagingWeb/Views/*,instantmessagingWeb/Pages/*,instantmessagingWeb.AcceptanceTests/*,**/ClientApp/src/scripts/*.js,**/ClientApp/src/app/testing/**,**/ClientApp/src/app/vh-officer/helper.ts,**/ClientApp/src/app/services/events.service.ts, **/ClientApp/src/app/send-instantmessaging-events/send-instantmessaging-events.component.ts,**/ClientApp/src/app/services/api/instantmessaging-web.service.ts,**/ClientApp/src/app/waiting-space/analogue-clock/analogue-clock.component.ts,**/app-insights-logger.service.ts,**/instantmessaging-filter.service.ts,**/instantmessaging-filter.service.ts,**/audio-only-image.service.ts
+                sonar.cs.opencover.reportsPaths=$(Common.TestResultsDirectory)/Coverage/coverage.opencover.xml
+                sonar.javascript.lcov.reportPaths=$(System.DefaultWorkingDirectory)/instantmessagingWeb/instantmessagingWeb/ClientApp/coverage/lcov.info
+                sonar.cpd.exclusions=**/tests/WRTestComponent.ts,**/joh-waiting-room/**
+                sonar.issue.ignore.multicriteria=e1,e2
+                sonar.issue.ignore.multicriteria.e1.ruleKey=typescript:S107
+                sonar.issue.ignore.multicriteria.e1.resourceKey=**/*.ts
+                sonar.issue.ignore.multicriteria.e2.ruleKey=typescript:S1874
+                sonar.issue.ignore.multicriteria.e2.resourceKey=**/*.ts
+            StrykerBreak: 75
+        ACTest: ${{ parameters.RunACTests }}
+        releaseParameters:
+            environment: Preview
+            subscription: $(pr_Subscription)
+            secrets_KeyVault: $(pr_Secret_KeyVault)
+            secrets_Subscription: $(pr_Secret_Subscription)
+            devOpsResource: vh_instantmessaging_web
+            deploymentSlot: production
+            appName: vh-instantmessaging-web-$(environment)
+            resourceGroup: vh-instantmessaging-web-$(environment)
+            appSettings: ${{ parameters.appSettings }}
+            testCaseFilter: TestCategory=smoketest
+            dependentApps:
+                - name: vh-user-api-$(environment)
+                  resourceGroup: vh-user-api-$(environment)
+                  healthEndpoint: $(user_api_url)healthcheck/health
+                - name: vh-instantmessaging-api-$(environment)
+                  resourceGroup: vh-instantmessaging-api-$(environment)
+                  healthEndpoint: $(instantmessaging_api_url)healthcheck/health
+                - name: vh-video-api-$(environment)
+                  resourceGroup: vh-video-api-$(environment)
+                  healthEndpoint: $(video_api_url)health/health
+            acceptanceTestSettings:
+                - name: VhServices:instantmessagingWebApiUrl
+                  value: $(instantmessaging_web_url)
+                - name: VhServices:instantmessagingWebUrl
+                  value: $(instantmessaging_web_url)
+                - ${{ each setting in parameters.testSettings }}:
+                      - name: ${{ setting.name }}
+                        value: ${{ setting.value }}
+                        secret: ${{ setting.secret }}
