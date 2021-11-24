@@ -47,7 +47,6 @@ namespace InstantMessagingWeb.Extensions
             var servicesConfiguration = container.GetService<IOptions<HearingServicesConfiguration>>().Value;
 
             services.AddHttpClient<IInstantMessagingApiClient, InstantMessagingApiClient>()
-                .AddHttpMessageHandler<InstantMessagingApiTokenHandler>()
                 .AddTypedClient(httpClient => BuildInstantMessagingApiClient(httpClient, servicesConfiguration));
 
             services.AddHttpClient<IUserApiClient, UserApiClient>()
